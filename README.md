@@ -2,7 +2,7 @@
 
 paper : https://arxiv.org/abs/1703.05921  
 
-##新建空白資料夾
+## 新建空白資料夾
 
 1.創建程式需求資料夾請執行 python create_folder.py  
 
