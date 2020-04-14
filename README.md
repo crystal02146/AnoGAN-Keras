@@ -24,7 +24,7 @@ paper : https://arxiv.org/abs/1703.05921
 ## 需求套件及環境:
 
 python == 3.6  
-numpy == 1.17.2(不限定版本)  
-opencv-python == 4.1.1.26(不限定版本)  
+numpy == 1.17.2 (不限定此版本)  
+opencv-python == 4.1.1.26 (不限定此版本)  
 tensorflow-gpu == 1.9.0  
 keras == 2.2.5  
