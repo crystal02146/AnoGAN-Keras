@@ -31,7 +31,7 @@ python create_folder.py
 
 ## 需求套件及環境:
 
-python == 3.6 (或以上)
+python == 3.6 (或以上)  
 numpy == 1.17.2 (不限定此版本)  
 opencv-python == 4.1.1.26 (不限定此版本)  
 tensorflow-gpu == 1.9.0  
