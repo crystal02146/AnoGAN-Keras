@@ -74,7 +74,7 @@ class DCGAN(object):
         self.dcgan.compile(loss='binary_crossentropy', optimizer=g_optim)
         self.d.trainable = True
         self.d.compile(loss='binary_crossentropy', optimizer=d_optim)
-        
+        K.set_learning_phase(1)
     #載入權重
     def load_weights(self, g_weight, d_weight):
         self.g.load_weights(g_weight)
