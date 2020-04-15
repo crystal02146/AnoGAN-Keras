@@ -40,6 +40,7 @@ class ANOGAN(object):
     def compile(self, optim):
 
         self.model.compile(loss=sum_of_residual, optimizer=optim)
+        K.set_learning_phase(0)
         
  
     def compute_anomaly_score(self, x, iterations):
