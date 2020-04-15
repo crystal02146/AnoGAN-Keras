@@ -29,10 +29,14 @@ python create_folder.py
  pip install -r requirements.txt  
 ```
 
-## 需求套件及環境:
+## 需求套件及環境
 
 python == 3.6 (版本3.0以上)  
 numpy == 1.17.2 (不限定此版本)  
 opencv-python == 4.1.1.26 (不限定此版本)  
 tensorflow-gpu == 1.9.0  
-keras == 2.2.5  
+keras == 2.2.5
+
+## 可視化結果 
+
+![image](https://github.com/crystal02146/AnoGAN-Keras/blob/master/histogram.png)
