@@ -30,7 +30,7 @@ python create_folder.py
  python test.py --result=1
 ```
 顯示異常分數直方圖
-(請先確認anomaly_score.txt是否存在若不存在請先執行test.py產生anomaly_score.txt) 
+(請先確認anomaly_score.txt是否存在若不存在請先執行test.py) 
 ```sh
  python histogram.py
 ```
