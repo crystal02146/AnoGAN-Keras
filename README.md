@@ -62,5 +62,5 @@ seaborn
 生成圖片及殘差圖片   
 
 ![image](https://github.com/crystal02146/image/blob/master/AnoGAN_result_normal1.PNG)
-![image](https://github.com/crystal02146/image/blob/master/AnoGAN_result_normal2.PNG)
+![image](https://github.com/crystal02146/image/blob/master/AnoGAN_result_normal3.PNG)
 ![image](https://github.com/crystal02146/image/blob/master/AnoGAN_result_abnormal1.PNG)
