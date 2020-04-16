@@ -39,4 +39,15 @@ keras == 2.2.5
 
 ## 可視化結果 
 
-![image](https://github.com/crystal02146/AnoGAN-Keras/blob/master/histogram.png)
+異常分數直方圖  
+
+```sh
+ python histogarm.py    
+```
+![image](https://github.com/crystal02146/image/blob/master/AnoGAN_histogram.png)
+
+結果圖  
+
+![image](https://github.com/crystal02146/image/blob/master/AnoGAN_result_normal1.PNG)
+![image](https://github.com/crystal02146/image/blob/master/AnoGAN_result_normal2.PNG)
+![image](https://github.com/crystal02146/image/blob/master/AnoGAN_result_abnormal1.PNG)
