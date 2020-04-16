@@ -48,10 +48,10 @@ python == 3.6 (版本3.0以上)
 numpy == 1.17.2 (不限定此版本)  
 opencv-python == 4.1.1.26 (不限定此版本)  
 tensorflow-gpu == 1.9.0  
-keras == 2.2.5
-argparse
-matplotlib
-seaborn
+keras == 2.2.5 
+argparse 
+matplotlib 
+seaborn 
 
 ## 異常分數直方圖 
 
