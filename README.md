@@ -19,11 +19,26 @@ python create_folder.py
 4.訓練完成後會將模型放進./model資料夾中
 
 ## 測試階段
-1.將測試圖片放進./dataset/test/abnormal/資料夾當中  
-2.測試圖片請執行 
+將測試圖片放進./dataset/test/abnormal/及./dataset/test/normal/資料夾當中  
+
+只顯示結果
 ```sh
  python test.py    
 ```
+顯示結果及圖片  
+```sh
+ python test.py --result=1
+```
+顯示異常分數直方圖
+```sh
+ python histogram.py
+```
+確認anomaly_score.txt是否存在若不存在請先執行test.py產生anomaly_score.txt  
+```sh
+ python test.py    
+```
+
+
 ## 安裝套件 
 ```sh
  pip install -r requirements.txt  
@@ -41,9 +56,6 @@ keras == 2.2.5
 
 異常分數直方圖  
 
-```sh
- python histogarm.py    
-```
 ![image](https://github.com/crystal02146/image/blob/master/AnoGAN_histogram.png)
 
 結果圖  
