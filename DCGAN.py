@@ -75,6 +75,7 @@ class DCGAN(object):
         self.d.trainable = True
         self.d.compile(loss='binary_crossentropy', optimizer=d_optim)
         K.set_learning_phase(1)
+        
     #載入權重
     def load_weights(self, g_weight, d_weight):
         self.g.load_weights(g_weight)
@@ -97,13 +98,13 @@ class DCGAN(object):
                 image_batch = X_train[index * batch_size:(index + 1) * batch_size]
                 
                 #圖片翻轉
-                '''
+                
                 for i in range(batch_size):
-                    if np.random.random() > 0.75:
+                    if np.random.random() > 0.5:
                         image_batch[i] = np.fliplr(image_batch[i])
                     if np.random.random() < 0.5:
                         image_batch[i] = np.flipud(image_batch[i])
-                '''
+                
                 generated_images = self.g.predict(noise)
                 
                 # attach label for training discriminator

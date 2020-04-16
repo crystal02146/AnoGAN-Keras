@@ -25,7 +25,7 @@ if __name__ == '__main__':
     
     batch_size = 16 #一次訓練資料數量
     epochs = 100   # 歷經全部資料集次數
-    input_dim = 100 #輸入隱維度z大小
+    input_dim = 200 #輸入隱維度z大小
     g_optim = Adam(lr=0.0001, beta_1=0.5, beta_2=0.999) #Adam優化器　lr 學習率 　
     d_optim = Adam(lr=0.0001, beta_1=0.5, beta_2=0.999)
     save_image_epoch = 10 # 每多少Epoch就儲存訓練過程圖到result資料夾
