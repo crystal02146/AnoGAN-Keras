@@ -49,6 +49,9 @@ numpy == 1.17.2 (不限定此版本)
 opencv-python == 4.1.1.26 (不限定此版本)  
 tensorflow-gpu == 1.9.0  
 keras == 2.2.5
+argparse
+matplotlib
+seaborn
 
 ## 可視化結果 
 
