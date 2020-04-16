@@ -53,13 +53,11 @@ argparse
 matplotlib
 seaborn
 
-## 可視化結果 
-
-異常分數直方圖  
+## 異常分數直方圖 
 
 ![image](https://github.com/crystal02146/image/blob/master/AnoGAN_histogram.png)
 
-結果圖  
+## 生成圖片及殘差圖片   
 
 ![image](https://github.com/crystal02146/image/blob/master/AnoGAN_result_normal1.PNG)
 ![image](https://github.com/crystal02146/image/blob/master/AnoGAN_result_normal2.PNG)
