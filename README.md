@@ -57,7 +57,7 @@ seaborn
 
 異常分數直方圖  
 
-<div align=center>![image](https://github.com/crystal02146/image/blob/master/AnoGAN_histogram.png)</div> 
+<div align=center><img width="150" height="150" src="https://github.com/crystal02146/image/blob/master/AnoGAN_histogram.png"></div> 
 
 生成圖片及殘差圖片   
 
