@@ -38,12 +38,12 @@ class ANOGAN(object):
         
     #AnoGAN 設定優化器 Loss值 
     def compile(self, optim):
-
+        
         self.model.compile(loss=sum_of_residual, optimizer=optim)
         K.set_learning_phase(0)
-        
  
     def compute_anomaly_score(self, x, iterations):
+        
         
         z = np.random.uniform(-1, 1, size=(1, self.input_dim))
        
