@@ -36,7 +36,7 @@ def difference(test_img,gen_img,threshold):
             residual_blue = abs(generate_pixel - origin_pixel)
             
             
-            residual_img[i,j] = residual_blue.astype('uint8')
+            residual_img[i,j] = max(residual_red,residual_green,residual_blue).astype('uint8')
 
     ret,threshold_img = cv2.threshold(residual_img,threshold,255,cv2.THRESH_BINARY)
     
