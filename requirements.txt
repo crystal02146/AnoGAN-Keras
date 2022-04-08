@@ -5,3 +5,119 @@ keras == 2.2.5
 argparse
 matplotlib
 seaborn
+
+
+
+
+
+from copy import deepcopy
+import numpy as np 
+import os
+import matplotlib.pyplot as plt
+import configparser
+
+import tensorflow as tf
+from tensorflow.keras.models import *
+from tensorflow.keras.layers import *
+from tensorflow.keras.optimizers import Adam, SGD, RMSprop
+from tensorflow.keras import backend as keras
+from tensorflow.keras import backend as K
+from tensorflow.keras.callbacks import ModelCheckpoint
+
+
+from dataloader import *
+from model import *
+
+#計算費雪矩陣
+def fisher_matrix(model, datas , labels , sample_num):
+
+    #得到先前訓練模型權重
+    weights = model.trainable_weights 
+    
+    
+    variances = [] #宣告空白的權重矩陣
+    for tensor in weights:
+        variances.append(tf.zeros_like(tensor))
+    
+    
+    
+    #選擇隨機的樣本
+    for i in range(sample_num):
+        
+        index = np.random.randint(len(datas))
+        data = datas[index]
+        data = data[np.newaxis,:,:,:] #擴充維度
+        
+        
+        #收集梯度
+        with tf.GradientTape() as tape:
+        
+            output = model(data)
+            output = tf.math.log(output) #對數相似度(log_likelihood)
+            
+        gradients = tape.gradient(output, weights) #計算梯度
+        
+        
+        j = 0 
+        for var, grad in zip(variances, gradients):
+            
+            
+            if grad is not None:
+                
+                print(str(j+1)+" " + str(tf.shape(grad)))
+                variances[j] = var + (grad**2)
+            else:
+                print(str(j+1)+" " + "No gradients")
+            
+            j+= 1
+            
+        print()
+        print()
+            
+
+    fisher_diagonal = []
+    
+
+    for tensor in variances:
+        fisher_diagonal.append( tensor / sample_num)
+
+     
+    return fisher_diagonal
+
+#計算EWC懲罰性損失函數
+def ewc_loss(ewc_lambda, model, datas, labels ,ewc_samples):
+    
+    
+    optimal_weights = deepcopy(model.trainable_weights) #複製模型不動到原始模型參數
+    fisher_diagonal = fisher_matrix(model, datas, labels, samples) #計算費雪矩陣
+    
+    
+    def loss_fn(new_model):
+        # We're computing:
+        # sum [(lambda / 2) * F * (current weights - optimal weights)^2]
+        loss = 0
+        current = new_model.trainable_weights
+        for f, c, o in zip(fisher_diagonal, current, optimal_weights):
+            loss += tf.reduce_sum(f * ((c - o) ** 2))
+
+        return loss * (lam / 2)
+
+    return loss_fn
+    
+    
+
+
+
+
+
+
+if __name__ == '__main__':
+    
+    model = UNet(256 , 256 , 1)#創建模型
+    model.load_weights("./model/"+"model.h5") #載入權重
+    
+    x_train, y_train = load_retrain_data() #載入資料
+    x_
+    
+    sample_num = 10 #少許先前資料樣本
+    matrix = fisher_matrix(model , x_train , y_train , sample_num) #計算費雪矩陣
