@@ -80,7 +80,7 @@ def get_fisher_matrix(model, datas , labels , sample_num):
 
     
     fisher_matrix = [tensor / sample_num for tensor in variance] #計算平均值
-    print(fisher_matrix)
+    
     return fisher_matrix
     
 
@@ -104,7 +104,7 @@ def train(datas , labels , batch_size , epochs , optimizer , ewc_lambda , model,
     total_num = datas.shape[0] #資料總數
     iters =  total_num // batch_size #計算總共迭代次數
     
-    loss_best = 999999999 #最佳損失函數
+    loss_best = 999999.99 #最佳損失函數
     
 
     for epoch in range(epochs):
@@ -135,35 +135,38 @@ def train(datas , labels , batch_size , epochs , optimizer , ewc_lambda , model,
                 current_weights = model.trainable_weights #目前權重
                 
                 loss_bce  = tf.keras.losses.binary_crossentropy(logits , label)
-                loss_bce = K.mean(loss_bce)
                 loss_ewc = get_loss_ewc(ewc_lambda , optimal_weights , current_weights , fisher_matrix)
+                
                 loss_ewc = tf.cast(loss_ewc, tf.float64)
                 
                 loss = loss_bce + loss_ewc #加入懲罰性損失函數
                 
-                print(loss_bce)
-                #print(np.array(loss_ewc))
                 
-                gradients = tape.gradient(loss_bce , model.trainable_weights , unconnected_gradients = "zero") #計算梯度
+                
+                gradients = tape.gradient(loss , model.trainable_weights , unconnected_gradients = "zero") #計算梯度
                 optimizer.apply_gradients(zip(gradients, model.trainable_weights))#優化器梯度下降
                 
-
+                loss_bce = K.mean(loss_bce)
+                loss_bce = np.array(loss_bce)
+                loss_ewc = np.array(loss_ewc)
                 
+                loss = K.mean(loss)
+                loss = np.array(loss)
+                loss = float(loss)
             
            
-            '''
-            #張量平均值
-            loss_fn = K.mean(loss_bce)
-            loss_ewc = K.mean(loss_ewc)
-            loss = K.mean(loss)
+
+            
+            print("epoch = (%s/%s) inter = (%s/%s) BCE loss = %0.7s EWC loss = %0.7s loss = %0.7s Best loss = %0.7s"%(epoch+1 , epochs , iter+1 , iters , loss_bce , loss_ewc , loss , loss_best))
+            
+            
+            if loss < loss_best:
                 
-            print("epoch = (%s/%s) inter = (%s/%s) fn loss = %s ewc loss = %s loss = %s"%(epoch+1 , epochs , iter+1 , iters , loss_bce , loss_ewc , loss))
-            '''
+                model.save_weights('./model/model_retrain.h5')
+                print("save model with loss = %s"%loss_best)
+                best_loss = loss
             
-            model.save_weights('./model/model_retrain.h5')
-            
-            
-            
+'''
 def custom_loss(ewc_lambda , model, optimal_weights , fisher_matrix):
     
     
@@ -180,7 +183,7 @@ def custom_loss(ewc_lambda , model, optimal_weights , fisher_matrix):
         return loss
 
     return fn_loss
-        
+'''
 
 
 
@@ -188,8 +191,8 @@ if __name__ == '__main__':
     
     #初始參數設定
     
-    sample_num = 30 #先前訓練過的資料樣本數量
-    ewc_lambda = 0.01 #原始資料重要度
+    sample_num = 400 #先前訓練過的資料樣本數量
+    ewc_lambda = 10 #原始資料重要度
     batch_size = 8 #批次大小
     epochs = 100 #週期次數
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
@@ -234,6 +237,16 @@ if __name__ == '__main__':
                               mode= 'min',
                               save_weights_only=True,
                               save_best_only = True)
+    
+    #Start Train
+    history = model.fit(x=data_task_B, y=label_task_B, 
+                    
+                    validation_split = 0.1,
+                    batch_size=16,
+                    epochs=100,
+                    verbose=1,
+                    callbacks=[checkpoints])
+    '''
     
     #Start Train
     history = model.fit(x=data_task_B, y=label_task_B, 
