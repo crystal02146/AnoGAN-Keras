@@ -9,12 +9,27 @@ seaborn
 
 
 
+# -*- coding: utf-8 -*-
+"""
+Created on 2020/10/16 14:30
 
-from copy import deepcopy
+@author: Tseng Yi-Yao
+
+introduction: 遷移式學習AI 鞏固彈性權重 避免過度訓練新資料進而影響舊資料表現
+
+"""
+
+
+import random
 import numpy as np 
 import os
 import matplotlib.pyplot as plt
 import configparser
+from copy import deepcopy
+from dataloader import *
+from model import *
+from tqdm import tqdm, trange
+
 
 import tensorflow as tf
 from tensorflow.keras.models import *
@@ -23,101 +38,209 @@ from tensorflow.keras.optimizers import Adam, SGD, RMSprop
 from tensorflow.keras import backend as keras
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import ModelCheckpoint
+from tensorflow.keras.losses import binary_crossentropy
 
 
-from dataloader import *
-from model import *
 
-#計算費雪矩陣
-def fisher_matrix(model, datas , labels , sample_num):
+#計算費雪訊息機率矩陣
+def get_fisher_matrix(model, datas , labels , sample_num):
 
     #得到先前訓練模型權重
     weights = model.trainable_weights 
-    
-    
-    variances = [] #宣告空白的權重矩陣
+
+    variance = [] #宣告空白的權重矩陣
     for tensor in weights:
-        variances.append(tf.zeros_like(tensor))
+        variance.append(tf.zeros_like(tensor))#填充數值0張量
     
+    
+    index = [i for i in range(len(datas))] #索引值列表
+    random.shuffle(index) #打亂索引值
     
     
     #選擇隨機的樣本
-    for i in range(sample_num):
+    for i in tqdm(range(sample_num)):
         
-        index = np.random.randint(len(datas))
-        data = datas[index]
+        data = datas[index[i]] #第幾編號影像
         data = data[np.newaxis,:,:,:] #擴充維度
         
         
-        #收集梯度
+        #計算梯度
         with tf.GradientTape() as tape:
-        
-            output = model(data)
+
+            input = weights
+
+            output = model(data) #輸出
             output = tf.math.log(output) #對數相似度(log_likelihood)
             
-        gradients = tape.gradient(output, weights) #計算梯度
+            
+            
+        gradients = tape.gradient(output, input ,unconnected_gradients = "zero") #計算梯度(微分) 模型輸入與輸出的梯度
+        variance = [var + (grad ** 2) for var, grad in zip(variance, gradients)] #變異矩陣
         
-        
-        j = 0 
-        for var, grad in zip(variances, gradients):
-            
-            
-            if grad is not None:
-                
-                print(str(j+1)+" " + str(tf.shape(grad)))
-                variances[j] = var + (grad**2)
-            else:
-                print(str(j+1)+" " + "No gradients")
-            
-            j+= 1
-            
-        print()
-        print()
-            
 
-    fisher_diagonal = []
     
-
-    for tensor in variances:
-        fisher_diagonal.append( tensor / sample_num)
-
-     
-    return fisher_diagonal
+    fisher_matrix = [tensor / sample_num for tensor in variance] #計算平均值
+    print(fisher_matrix)
+    return fisher_matrix
+    
 
 #計算EWC懲罰性損失函數
-def ewc_loss(ewc_lambda, model, datas, labels ,ewc_samples):
-    
-    
-    optimal_weights = deepcopy(model.trainable_weights) #複製模型不動到原始模型參數
-    fisher_diagonal = fisher_matrix(model, datas, labels, samples) #計算費雪矩陣
-    
-    
-    def loss_fn(new_model):
-        # We're computing:
-        # sum [(lambda / 2) * F * (current weights - optimal weights)^2]
-        loss = 0
-        current = new_model.trainable_weights
-        for f, c, o in zip(fisher_diagonal, current, optimal_weights):
-            loss += tf.reduce_sum(f * ((c - o) ** 2))
+def get_loss_ewc(ewc_lambda, optimal_weights , current_weights , fisher_matrix):
 
-        return loss * (lam / 2)
+    loss = 0
+    
+    for f, c, o in zip(fisher_matrix, current_weights, optimal_weights):
 
-    return loss_fn
+        loss += tf.reduce_sum(f  * tf.math.square(c - o))
+        
+    
+    return 0.5 * ewc_lambda * loss 
     
     
 
+#自訂義訓練
+def train(datas , labels , batch_size , epochs , optimizer , ewc_lambda , model, optimal_weights , fisher_matrix):
+    
+    total_num = datas.shape[0] #資料總數
+    iters =  total_num // batch_size #計算總共迭代次數
+    
+    loss_best = 999999999 #最佳損失函數
+    
+
+    for epoch in range(epochs):
+        
+        #==========生成亂數索引值===========
+        
+        indexs = [i for i in range(total_num)] #計算索引值列表
+        #random.shuffle(indexs) #打亂索引值
+        
+        #====================================
+        
+        for iter in range(iters):
+            
+            start = iter * batch_size #起始索引值
+            end = start + batch_size #結束索引值
+            
+            
+            #找到對應的資料與標籤
+            data = datas[indexs[start]:indexs[end]]
+            label = labels[indexs[start]:indexs[end]]
 
 
+            
+            #梯度下降
+            with tf.GradientTape() as tape:
+            
+                logits = model(data)
+                current_weights = model.trainable_weights #目前權重
+                
+                loss_bce  = tf.keras.losses.binary_crossentropy(logits , label)
+                loss_bce = K.mean(loss_bce)
+                loss_ewc = get_loss_ewc(ewc_lambda , optimal_weights , current_weights , fisher_matrix)
+                loss_ewc = tf.cast(loss_ewc, tf.float64)
+                
+                loss = loss_bce + loss_ewc #加入懲罰性損失函數
+                
+                print(loss_bce)
+                #print(np.array(loss_ewc))
+                
+                gradients = tape.gradient(loss_bce , model.trainable_weights , unconnected_gradients = "zero") #計算梯度
+                optimizer.apply_gradients(zip(gradients, model.trainable_weights))#優化器梯度下降
+                
+
+                
+            
+           
+            '''
+            #張量平均值
+            loss_fn = K.mean(loss_bce)
+            loss_ewc = K.mean(loss_ewc)
+            loss = K.mean(loss)
+                
+            print("epoch = (%s/%s) inter = (%s/%s) fn loss = %s ewc loss = %s loss = %s"%(epoch+1 , epochs , iter+1 , iters , loss_bce , loss_ewc , loss))
+            '''
+            
+            model.save_weights('./model/model_retrain.h5')
+            
+            
+            
+def custom_loss(ewc_lambda , model, optimal_weights , fisher_matrix):
+    
+    
+    def fn_loss(y_true, y_pred):
+        
+        current_weights = model.trainable_weights
+        
+        
+        loss_bce = binary_crossentropy(y_true, y_pred)
+        loss_ewc = get_loss_ewc(ewc_lambda, optimal_weights , current_weights , fisher_matrix)
+        
+        loss = loss_bce + loss_ewc
+        
+        return loss
+
+    return fn_loss
+        
 
 
 
 if __name__ == '__main__':
     
-    model = UNet(256 , 256 , 1)#創建模型
+    #初始參數設定
+    
+    sample_num = 30 #先前訓練過的資料樣本數量
+    ewc_lambda = 0.01 #原始資料重要度
+    batch_size = 8 #批次大小
+    epochs = 100 #週期次數
+    optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
+    
+    #創建模型
+    model = UNet(256 , 256 , 1) #模型
+    model.summary()
     model.load_weights("./model/"+"model.h5") #載入權重
+
+    print("%s layers in model"% len(model.layers)) #顯示有多少層model
     
-    x_train, y_train = load_retrain_data() #載入資料
-    x_
     
-    sample_num = 10 #少許先前資料樣本
-    matrix = fisher_matrix(model , x_train , y_train , sample_num) #計算費雪矩陣
+    data_task_A , label_task_A =  load_train_data() #載入驗證集作為先驗分布
+    data_task_B , label_task_B =  load_retrain_data() #載入重新學習的資料集
+
+    
+    #先驗資料分布
+    
+    print("\nComputing Fisher infomation matrix\n")
+    
+    fisher_matrix = get_fisher_matrix(model, data_task_A , label_task_A , sample_num) #計算費雪矩陣(計算先驗機率)
+    
+    print("\nComputing Fisher infomation matrix complete!! \n")
+    
+    #原始最佳權重
+    optimal_weights = deepcopy(model.trainable_weights)
+    
+
+    #開始訓練
+    
+    train(data_task_B , label_task_B , batch_size , epochs , optimizer , ewc_lambda , model , optimal_weights , fisher_matrix)
+    
+
+    #model.compile(optimizer = optimizer ,loss = [custom_loss(ewc_lambda , model, optimal_weights , fisher_matrix)])
+    
+    
+    '''
+    #set checkpoint
+    checkpoints = ModelCheckpoint("./model/model_retrain.h5",
+                              monitor= "val_loss",
+                              verbose= 1,
+                              mode= 'min',
+                              save_weights_only=True,
+                              save_best_only = True)
+    
+    #Start Train
+    history = model.fit(x=data_task_B, y=label_task_B, 
+                    
+                    validation_split = 0.1,
+                    batch_size=16,
+                    epochs=100,
+                    verbose=1,
+                    callbacks=[checkpoints])
+    '''
