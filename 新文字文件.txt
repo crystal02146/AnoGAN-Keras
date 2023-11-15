@@ -1,0 +1,130 @@
+import sys
+from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QHBoxLayout , QVBoxLayout , QSizePolicy
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont
+import random
+import time
+
+class MyWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        
+        self.questions = ["Space" , "AutoLabel" , "Fixed" , "Computer"]
+        random.shuffle(self.questions)
+        self.id = 0
+
+        self.vertical_layout = QVBoxLayout()
+        self.setWindowTitle('PyQt Horizontal Layout Example')
+        '''
+        button = QPushButton('Confirm')
+        button.clicked.connect(self.on_button_click)
+        self.vertical_layout.addWidget(button)
+        '''
+
+        self.label_list = []
+        self.create_layout()
+        
+    def on_button_click(self):
+
+        if self.id < len(self.questions)-1:
+            self.id += 1
+            self.delete_layout()
+            self.create_layout()
+        
+    def create_layout(self):
+    
+        self.question = self.questions[self.id]
+        if self.id < len(self.questions)-1:
+            self.id += 1
+
+        self.user_answer = ""
+        self.blank = " " * (25 - len(self.questions))#random.randint(0 , 10)
+        self.label_list.clear()
+        
+        #Layout 設定
+        layout1 = QHBoxLayout()
+        layout2 = QHBoxLayout()
+        
+        font = QFont()
+        font.setPointSize(10)
+        font.setFamily("微軟正黑體")
+
+        for char in self.question + self.blank:
+            label = QLabel(char)
+            label.setFont(font)
+            label.setAlignment(Qt.AlignCenter)
+            layout1.addWidget(label)
+            
+        for char in "＿" * (len(self.question)+len(self.blank)):
+            label = QLabel(char)
+            label.setFont(font)
+            label.setAlignment(Qt.AlignCenter)
+            self.label_list.append(label)
+            layout2.addWidget(label)
+
+        self.vertical_layout.addLayout(layout1)
+        self.vertical_layout.addLayout(layout2)
+        #self.vertical_layout.setSizeConstraint(QVBoxLayout.SetFixedSize)
+        
+        self.setLayout(self.vertical_layout)
+        
+        
+    def delete_widget(self, layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+    
+    
+    def delete_layout(self):
+       
+        while self.vertical_layout.count():
+            item = self.vertical_layout.takeAt(0)
+            layout = item.layout()
+            if layout:
+               self.delete_widget(layout)
+               layout.deleteLater()
+               
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        
+        if key == Qt.Key_Enter or key == Qt.Key_Return:
+            self.delete_layout()
+            self.create_layout()
+        elif key == Qt.Key_Space:
+            self.user_answer += " "
+        elif key == Qt.Key_Backspace:
+            self.user_answer = self.user_answer[:-1]
+        elif Qt.Key_A <= key <= Qt.Key_Z:
+            self.user_answer += event.text()
+        else:
+            event.ignore()
+        
+        
+        for i in range(len(self.label_list)):
+            if i < len(self.user_answer):
+                char = self.user_answer[i]
+                if i < len(self.question):
+                    if char == self.question[i] or char.upper() == self.question[i] or char.lower() == self.question[i]:
+                        char = "<font color='green'>%s</font> "%self.question[i]
+                    else:
+                        char = "<font color='red'>%s</font> "%char
+                else:
+                    char = "<font color='red'>%s</font> "%char
+                    
+                self.label_list[i].setText(char)
+            else:
+                self.label_list[i].setText("＿")
+            
+        if self.user_answer.lower() == self.question.lower():
+            self.delete_layout()
+            self.create_layout()
+            
+    
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    widget = MyWidget()
+    widget.show()
+    sys.exit(app.exec_())
