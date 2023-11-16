@@ -1,17 +1,24 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QHBoxLayout , QVBoxLayout , QSizePolicy
+from PyQt5.QtWidgets import QApplication, QWidget,QScrollBar , QLabel, QPushButton, QHBoxLayout , QVBoxLayout , QSizePolicy , QMessageBox
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 import random
 import time
+import os
 
 class MyWidget(QWidget):
     def __init__(self):
         super().__init__()
         
-        self.questions = ["Space" , "AutoLabel" , "Fixed" , "Computer"]
-        random.shuffle(self.questions)
-        self.id = 0
+        self.englishs = []
+        self.chineses = []
+        
+        self.load_data()
+        
+        self.count_list = list(range(len(self.englishs)))
+        self.count_list = random.sample(self.count_list, len(self.count_list))
+
+        self.count = 0
 
         self.vertical_layout = QVBoxLayout()
         self.setWindowTitle('PyQt Horizontal Layout Example')
@@ -23,49 +30,83 @@ class MyWidget(QWidget):
 
         self.label_list = []
         self.create_layout()
+    
+    def load_data(self):
         
+        path = './vocabulary'
+
+        filenames = os.listdir(path)
+        for filename in filenames:
+        
+            with open(os.path.join(path , filename) , 'r', encoding='utf-8') as file:
+                english = file.readline().strip()
+                chinese = file.readline().strip()
+                
+                self.englishs.append(english)
+                self.chineses.append(chinese)
+                
     def on_button_click(self):
 
-        if self.id < len(self.questions)-1:
-            self.id += 1
+        if self.count < len(self.englishs)-1:
+            self.count += 1
             self.delete_layout()
             self.create_layout()
         
     def create_layout(self):
     
-        self.question = self.questions[self.id]
-        if self.id < len(self.questions)-1:
-            self.id += 1
-
-        self.user_answer = ""
-        self.blank = " " * (25 - len(self.questions))#random.randint(0 , 10)
-        self.label_list.clear()
+        self.english = self.englishs[self.count_list[self.count]]
+        chinese = self.chineses[self.count_list[self.count]]
         
+        self.user_answer = ""
+        self.blank = " " * (15 - len(self.english))#random.randint(0 , 10)
+        self.label_list.clear()
+        self.setGeometry(100, 100, 10, 10) 
         #Layout 設定
+        scrollbar = QScrollBar(self)
+        scrollbar.setOrientation(Qt.Horizontal)
+        layout0 = QHBoxLayout()
         layout1 = QHBoxLayout()
         layout2 = QHBoxLayout()
         
         font = QFont()
-        font.setPointSize(10)
+        font.setPointSize(24)
         font.setFamily("微軟正黑體")
-
-        for char in self.question + self.blank:
+        
+        label = QLabel(str(self.count+1)+". "+chinese)
+        label.setFont(font)
+        layout0.addWidget(label)
+        
+        for i in range(len(self.english)+len(self.blank)):
+        
+            if i < len(self.english):
+                char = self.english[i]
+                if i == 0 or i == len(self.english) - 1:
+                    char = self.english[i]
+                elif char != " ":
+                    char = "＿"
+            else:
+                char = " "
+            
             label = QLabel(char)
             label.setFont(font)
             label.setAlignment(Qt.AlignCenter)
             layout1.addWidget(label)
             
-        for char in "＿" * (len(self.question)+len(self.blank)):
+        for char in "＿" * (len(self.english)+len(self.blank)):
             label = QLabel(char)
             label.setFont(font)
             label.setAlignment(Qt.AlignCenter)
             self.label_list.append(label)
+            
             layout2.addWidget(label)
+        
 
+        
+        self.vertical_layout.addLayout(layout0)
         self.vertical_layout.addLayout(layout1)
         self.vertical_layout.addLayout(layout2)
-        #self.vertical_layout.setSizeConstraint(QVBoxLayout.SetFixedSize)
-        
+        self.vertical_layout.addWidget(scrollbar)
+
         self.setLayout(self.vertical_layout)
         
         
@@ -86,15 +127,38 @@ class MyWidget(QWidget):
                self.delete_widget(layout)
                layout.deleteLater()
                
+        
 
+            
+    def skip_next_question(self):
+
+        if self.count < len(self.englishs)-1:
+            self.count += 1
+        else:
+            self.show_info_message()
+            self.count = 0
+        self.setGeometry(300, 100, 10, 10) 
+        self.delete_layout()
+        self.create_layout()
+
+        print("hi")
+        
+    
     def keyPressEvent(self, event):
         key = event.key()
         
+        if event.modifiers() & Qt.ControlModifier:
+            self.skip_next_question()
+        
         if key == Qt.Key_Enter or key == Qt.Key_Return:
-            self.delete_layout()
-            self.create_layout()
+            if self.user_answer.lower() == self.english.lower():
+                self.skip_next_question()
+
+            
+            
         elif key == Qt.Key_Space:
             self.user_answer += " "
+            
         elif key == Qt.Key_Backspace:
             self.user_answer = self.user_answer[:-1]
         elif Qt.Key_A <= key <= Qt.Key_Z:
@@ -106,22 +170,24 @@ class MyWidget(QWidget):
         for i in range(len(self.label_list)):
             if i < len(self.user_answer):
                 char = self.user_answer[i]
-                if i < len(self.question):
-                    if char == self.question[i] or char.upper() == self.question[i] or char.lower() == self.question[i]:
-                        char = "<font color='green'>%s</font> "%self.question[i]
+                if i < len(self.english):
+                    if char == self.english[i] or char.upper() == self.english[i] or char.lower() == self.english[i]:
+                        char = "<font color='green'>%s</font>"%self.english[i]
                     else:
-                        char = "<font color='red'>%s</font> "%char
+                        char = "<font color='red'>%s</font>"%char
                 else:
-                    char = "<font color='red'>%s</font> "%char
+                    char = "<font color='red'>%s</font>"%char
                     
                 self.label_list[i].setText(char)
             else:
                 self.label_list[i].setText("＿")
             
-        if self.user_answer.lower() == self.question.lower():
-            self.delete_layout()
-            self.create_layout()
-            
+            self.label_list[i].setAlignment(Qt.AlignCenter)
+    
+    def show_info_message(self):
+        QMessageBox.information(self, '信息', '你已經做完所有考題', QMessageBox.Ok)
+
+    
     
 if __name__ == '__main__':
     app = QApplication(sys.argv)
