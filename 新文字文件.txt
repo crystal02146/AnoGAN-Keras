@@ -1,10 +1,35 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QScrollArea , QLabel, QPushButton, QHBoxLayout , QVBoxLayout , QSizePolicy , QMessageBox , QMenuBar , QAction
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QFont
 import random
 import time
 import os
+from functools import partial
+import pyttsx3
+
+class ListenThread(QThread):
+    finished_signal = pyqtSignal(str)
+    def __init__(self , english):
+        super().__init__()
+        self.english = english
+    def run(self):
+
+            
+        try:
+            # 初始化 TTS 引擎
+            engine = pyttsx3.init()
+            
+            # 设置语言为英语
+            engine.setProperty('rate', 150)  # 设置语速，可根据需要调整
+            engine.say(self.english)
+            
+            # 等待语音播放完成
+            engine.runAndWait()
+        except:
+            engine.stop()
+                    
+        self.finished_signal.emit("finish")
 
 class MyWidget(QWidget):
     def __init__(self):
@@ -14,14 +39,12 @@ class MyWidget(QWidget):
         self.chineses = []
 
         self.load_data()
-        
         self.max_length = len(max(self.englishs, key=len))
         
         self.count = 0
         self.count_list = list(range(len(self.englishs)))
         self.count_list = random.sample(self.count_list, len(self.count_list))
 
-        
 
         self.vertical_layout = QVBoxLayout()
         self.vertical_layout2 = QVBoxLayout()
@@ -35,7 +58,7 @@ class MyWidget(QWidget):
     
     def load_data(self):
         
-        path = './voc'
+        path = './vocabulary'
 
         filenames = os.listdir(path)
         for filename in filenames:
@@ -67,25 +90,43 @@ class MyWidget(QWidget):
         
         layout_toolbar = QHBoxLayout()
         button_listen = QPushButton('Listen')
+        
+        button_listen_answer = QPushButton('Listen your answer')
         button_hint = QPushButton('Hint')
+        
+        button_listen.setFocusPolicy(Qt.NoFocus)
+        button_listen_answer.setFocusPolicy(Qt.NoFocus)
+        button_hint.setFocusPolicy(Qt.NoFocus)
         button_hint.clicked.connect(self.on_button_click)
+        
+        button_listen_answer.clicked.connect(partial(self.on_listen_button_click , self.user_answer) )
+        button_listen.clicked.connect(partial(self.on_listen_button_click , self.english) )
         
         timer = "time：00:00:00"
         label_timer = QLabel(timer)
+        label_timer.setAlignment(Qt.AlignRight)
         #label_timer.setFont(font)
-        #label.setAlignment(Qt.AlignRight)
+        
         label_blank = QLabel("")
 
         
         layout_toolbar.addWidget(button_listen , 1)
+        layout_toolbar.addWidget(button_listen_answer , 1)
         layout_toolbar.addWidget(button_hint , 1)
         layout_toolbar.addWidget(label_blank , 1)
         layout_toolbar.addWidget(label_timer , 1)
         
         return layout_toolbar
     
-    def on_button_click(self):
+    
+    def on_listen_button_click(self , words):
         
+        print("listen wors = %s"%words)
+        self.thread = ListenThread(words)
+        self.thread.start()
+
+    
+    def on_button_click(self):
         is_reveal = False
         for i in range(len(self.label_hint_letter)):
             letter = self.label_hint_letter[i]
@@ -103,21 +144,24 @@ class MyWidget(QWidget):
             self.label_hint_letter[len(self.english)-1].setText(self.english[-1])
             
     def create_layout(self):
-    
+        
         self.english = self.englishs[self.count_list[self.count]]
         self.english_hint = "_" * len(self.english)
-        
+        self.user_answer = ""
+        self.blank = " " * (self.max_length - len(self.english))
+
         english_hint = list(self.english_hint)
         english_hint[0] = self.english[0]
         english_hint[-1] = self.english[-1]
+        indices = [index for index, value in enumerate(self.english) if value == " "]
+        for index in indices:
+            english_hint[index] = self.english[index]
         self.english_hint = ''.join(english_hint)
         
         chinese = self.chineses[self.count_list[self.count]]
         
-        self.user_answer = ""
-        self.blank = " " * (self.max_length - len(self.english))
-        self.label_answer_letter.clear()
-        self.label_hint_letter.clear()
+
+
          
         #Layout 設定
         scroll_area = QScrollArea()
@@ -125,9 +169,8 @@ class MyWidget(QWidget):
         scroll_area.setFrameShape(QScrollArea.NoFrame)
 
         font = QFont()
-        font.setPointSize(20)
+        font.setPointSize(24)
         font.setFamily("微軟正黑體")
-        #font.setLetterSpacing(QFont.AbsoluteSpacing, 0)
         
         
         menu_bar = self.load_menu_bar()
@@ -152,6 +195,7 @@ class MyWidget(QWidget):
                 char = " "
             label = QLabel(char)
             label.setFont(font)
+            label.setFixedSize(24 , 45)
             label.setAlignment(Qt.AlignCenter)
             self.label_hint_letter.append(label)
             layout_letter.addWidget(label)
@@ -162,13 +206,14 @@ class MyWidget(QWidget):
                 char = " "
             label = QLabel(char)
             label.setFont(font)
+            label.setFixedSize(24 , 45)
             label.setAlignment(Qt.AlignCenter)
             self.label_answer_letter.append(label)
             layout_letter.addWidget(label)
             
             
             layout_answer.addLayout(layout_letter)
-            #layout_answer.setSpacing(0)
+            layout_answer.setSpacing(0)
             
         self.vertical_layout.setMenuBar(menu_bar)
         self.vertical_layout.addLayout(layout_toolbar)
@@ -177,17 +222,17 @@ class MyWidget(QWidget):
         scroll_content = QWidget()
         scroll_content.setLayout(layout_answer)
         scroll_area.setWidget(scroll_content)
-        scroll_area.setFixedSize(500, 100)
-        
+        scroll_area.setFixedSize(700, 150)
         self.vertical_layout.addWidget(scroll_area)
         
         self.setLayout(self.vertical_layout)
 
-        
+        scroll_area.setFocus()
     
     def delete_layout(self):
-       
+    
         while self.vertical_layout.count():
+
             print("Layout = %s"%self.vertical_layout.count())
             item = self.vertical_layout.takeAt(0)
             layout = item.layout()
@@ -198,10 +243,20 @@ class MyWidget(QWidget):
                     widget = item.widget()
                     if widget:
                         widget.deleteLater()
-                layout.deleteLater()
-               
 
-            
+                    
+                layout.deleteLater()
+                
+                
+        for label in self.label_answer_letter:
+            label.deleteLater()
+        for label in self.label_hint_letter:
+            label.deleteLater()
+        
+        self.label_answer_letter.clear()
+        self.label_hint_letter.clear()
+        
+        
     def skip_next_question(self):
 
         if self.count < len(self.englishs)-1:
@@ -212,10 +267,10 @@ class MyWidget(QWidget):
 
         self.delete_layout()
         self.create_layout()
-
+        
         
     def user_answer_check(self):
-    
+        
         for i in range(len(self.label_answer_letter)):
             if i < len(self.user_answer):
                 char = self.user_answer[i]
@@ -246,15 +301,14 @@ class MyWidget(QWidget):
         elif key == Qt.Key_Enter or key == Qt.Key_Return:
             if self.user_answer.lower() == self.english.lower():
                 self.skip_next_question()
-
-        elif key == Qt.Key_Space:
-            self.user_answer += " "
-            self.user_answer_check()
+            
         elif key == Qt.Key_Backspace:
             self.user_answer = self.user_answer[:-1]
             self.user_answer_check()
-        elif Qt.Key_A <= key <= Qt.Key_Z:
+        elif Qt.Key_A <= key <= Qt.Key_Z or key == Qt.Key_Space:
             self.user_answer += event.text()
+            self.on_listen_button_click(self.user_answer)
+            
             self.user_answer_check()
         else:
             event.ignore()
