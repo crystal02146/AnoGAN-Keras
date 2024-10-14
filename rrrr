@@ -1,0 +1,402 @@
+mport tensorflow as tf
+import cv2
+from tensorflow.keras import layers
+import matplotlib.pyplot as plt
+
+
+from tensorflow.keras.models import *
+from tensorflow.keras.layers import *
+from tensorflow.keras.optimizers import Adam, SGD, RMSprop
+from tensorflow.keras import backend as keras
+from tensorflow.keras import backend as K
+from tensorflow.keras.callbacks import ModelCheckpoint
+from tensorflow.keras import regularizers
+from tensorflow.keras.losses import *
+
+import tensorflow as tf
+import tensorflow.keras.backend as K
+from tensorflow.keras import activations, initializers, regularizers, constraints
+from tensorflow.python.keras.utils.generic_utils import func_dump, func_load, deserialize_keras_object, has_arg
+from tensorflow.python.keras.utils import conv_utils
+from tensorflow.keras.layers import Dense, Conv1D, Conv2D, Conv3D, Conv2DTranspose, Embedding
+from tensorflow.keras.layers import InputSpec
+from tensorflow.keras.initializers import RandomNormal
+
+import numpy as np
+from keras_drop_block import DropBlock2D
+from AI.CW_SSIM import *
+
+
+#反正規化資料
+def denormalization(data, min_value, max_value):
+    data  = (data - min_value) / (max_value - min_value) * 255
+    return data
+
+
+def MAE(y_true, y_pred):
+    '''
+    y_true = y_true.numpy()
+    y_pred = y_pred.numpy()
+    
+    mae = np.mean(np.abs(y_pred - y_true))
+    
+    return tf.convert_to_tensor(mae, dtype=tf.float32)
+    '''
+    return tf.reduce_mean(tf.abs(y_pred - y_true))
+    
+
+def SSIMLoss(y_true, y_pred):
+    
+    SSIM = tf.reduce_mean(tf.image.ssim(y_true, y_pred, max_val = 1.0 , filter_size=3))
+    
+    SSIM_loss =  1- SSIM
+
+    return SSIM_loss
+
+
+#殘差模塊
+def Resblock(x, filters):
+    
+    shortcut = Conv2D(filters, 1, strides=1, padding='same',kernel_initializer=initializers.he_normal())(x)
+    
+    # First convolution layer
+    x = Conv2D(filters, kernel_size=3, padding='same',kernel_initializer=initializers.he_normal())(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    
+    
+    # Second convolution layer
+    x = Conv2D(filters, kernel_size=3, padding='same',kernel_initializer=initializers.he_normal())(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    
+    
+    # Add shortcut to the output
+    x = Add()([x, shortcut])
+    x = Activation('relu')(x)
+
+    return x
+
+
+#自我注意模塊
+class SelfAttention(layers.Layer):
+    def __init__(self):
+        super(SelfAttention, self).__init__()
+        
+    def build(self, input_shape):
+
+        self.Wq = self.add_weight(name='Wq', shape=(input_shape[-1] , input_shape[-1]), initializer='glorot_uniform', trainable=True)
+        self.Wk = self.add_weight(name='Wk', shape=(input_shape[-1] , input_shape[-1]), initializer='glorot_uniform', trainable=True)
+        self.Wv = self.add_weight(name='Wv', shape=(input_shape[-1] , input_shape[-1]), initializer='glorot_uniform', trainable=True)
+
+    def call(self, x):
+        q = tf.matmul(x, self.Wq)
+        k = tf.matmul(x, self.Wk)
+        v = tf.matmul(x, self.Wv)
+
+        attention_score = tf.matmul(q, k, transpose_b=True)
+        attention_score = tf.nn.softmax(attention_score, axis=-1)
+
+        output = tf.matmul(attention_score, v)
+        return output
+
+
+#全連結層譜正規化
+class DenseSN(Dense):
+
+    # 創建權重矩陣
+    def build(self, input_shape):
+    
+        # 創建權重矩陣
+        input_dim = input_shape[-1]
+        self.kernel = self.add_weight(shape=(input_dim, self.units),
+                                      initializer=self.kernel_initializer,
+                                      name='kernel',
+                                      regularizer=self.kernel_regularizer,
+                                      constraint=self.kernel_constraint)
+        # 創建偏差項
+        if self.use_bias:
+            self.bias = self.add_weight(shape=(self.units,),
+                                        initializer=self.bias_initializer,
+                                        name='bias',
+                                        regularizer=self.bias_regularizer,
+                                        constraint=self.bias_constraint)
+        else:
+            self.bias = None
+        
+        self.u = self.add_weight(shape=tuple([1, self.kernel.shape.as_list()[-1]]),
+                         initializer=initializers.RandomNormal(0, 1),
+                         name='sn',
+                         trainable=False)
+        
+        
+    def call(self, inputs): 
+        
+        #L2正規化
+        def _l2normalize(v, eps=1e-12):
+            return v / (K.sum(v ** 2) ** 0.5 + eps)
+        
+        #幂迭代法
+        def power_iteration(W, u):
+            _u = u
+            _v = _l2normalize(K.dot(_u, K.transpose(W)))
+            _u = _l2normalize(K.dot(_v, W))
+            return _u, _v
+        
+        W_shape = self.kernel.shape.as_list()
+        
+        #平坦化張量
+        W_reshaped = K.reshape(self.kernel, [-1, W_shape[-1]])
+        _u , _v = power_iteration(W_reshaped, self.u)
+        
+        #計算Sigma
+        sigma=K.dot(_v, W_reshaped)
+        sigma=K.dot(sigma, K.transpose(_u))
+        
+        #頻譜正規化
+        W_bar = W_reshaped / sigma
+        
+        #輸出
+        output = K.dot(inputs, W_bar)
+        
+        return output
+
+
+#判别器網路
+def build_discriminator():
+
+    x = Input((8192,))
+     
+    y = SelfAttention()(x)
+    
+    
+    y = DenseSN(4096)(y)
+    y = BatchNormalization()(y)
+    y = LeakyReLU(0.2)(y)
+    y = Dropout(0.1)(y)
+
+    y = DenseSN(2048)(x)
+    y = BatchNormalization()(y)
+    y = LeakyReLU(0.2)(y)
+    y = Dropout(0.1)(y)
+    
+    #256
+    y = DenseSN(1024)(x)
+    y = BatchNormalization()(y)
+    y = LeakyReLU(0.2)(y)
+    y = Dropout(0.1)(y)
+    
+    #256
+    y = DenseSN(512)(x)
+    y = BatchNormalization()(y)
+    y = LeakyReLU(0.2)(y)
+    y = Dropout(0.1)(y)
+    
+    #256
+    y = DenseSN(256)(y)
+    y = BatchNormalization()(y)
+    y = LeakyReLU(0.2)(y)
+    y = Dropout(0.1)(y)
+    
+    #128
+    y = DenseSN(128)(y)
+    y = BatchNormalization()(y)
+    y = LeakyReLU(0.2)(y)
+    y = Dropout(0.1)(y)
+    
+    #64
+    y = DenseSN(64)(y)
+    y = BatchNormalization()(y)
+   
+    y = DenseSN(32)(y)
+    y = BatchNormalization()(y)
+
+   #32
+    y = DenseSN(16)(y)
+    y = BatchNormalization()(y)
+    
+    #1
+    y = DenseSN(1)(y)#'or linear sigmoid'
+
+    model = Model(x , y, name="Discrminator")
+
+    return model
+
+
+#生成器網路
+def build_generator():
+
+    inputs = Input(8192)
+    
+    x = Reshape((4,4,512))(inputs)
+    
+    x = Conv2D(filters = 512, kernel_size = 3, padding = 'same')(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    x = Dropout(0.1)(x)
+    x = UpSampling2D()(x)
+    
+    x = Conv2D(filters = 256, kernel_size = 3, padding = 'same')(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    x = Dropout(0.1)(x)
+    x = UpSampling2D()(x)
+
+    x = Conv2D(filters = 128, kernel_size = 3, padding = 'same')(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    x = Dropout(0.1)(x)
+    x = UpSampling2D()(x)
+    
+    x = Conv2D(filters = 64, kernel_size = 3, padding = 'same')(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    x = Dropout(0.1)(x)
+    x = UpSampling2D()(x)
+    
+    x = Conv2D(filters = 32, kernel_size = 3, padding = 'same')(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    x = Dropout(0.1)(x)
+    x = UpSampling2D()(x)
+    
+    x = Conv2D(filters = 16, kernel_size = 3, padding = 'same')(x)
+    x = Activation('relu')(x)
+    x = UpSampling2D()(x)
+    
+    #256x256x1
+    x = Conv2D(filters = 16, kernel_size = 3, padding = 'same', activation='relu')(x)
+    x = Conv2D(filters = 8, kernel_size = 3, padding = 'same', activation='relu')(x)
+    x = Conv2D(filters = 1, kernel_size = 3, padding = 'same')(x)
+    outputs = Activation('tanh')(x)
+    
+    
+    model = Model(inputs=inputs , outputs=outputs)
+
+    return model 
+
+
+
+#編碼器網路
+def build_encoder():
+    
+    skip_layers = [] #跳躍連結層
+    
+    inputs = Input((256, 256, 1))
+    
+    #256x256x1
+    x = Conv2D(filters = 8, kernel_size = 3, padding = 'same')(inputs)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(0.2)(x)
+    x = MaxPooling2D()(x)
+    x = Dropout(0.2)(x)
+    
+
+    x = Conv2D(filters = 16, kernel_size = 3, padding = 'same')(x)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(0.2)(x)
+    x = MaxPooling2D()(x)
+    x = Dropout(0.2)(x)
+    
+
+    x = Conv2D(filters = 32, kernel_size = 3, padding = 'same')(x)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(0.2)(x)
+    x = MaxPooling2D()(x)
+    x = Dropout(0.2)(x)
+    
+
+    x = Conv2D(filters = 64, kernel_size = 3, padding = 'same')(x)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(0.2)(x)
+    x = MaxPooling2D()(x)
+    x = Dropout(0.2)(x)
+    
+    
+    x = Conv2D(filters = 128, kernel_size = 3, padding = 'same')(x)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(0.2)(x)
+    x = MaxPooling2D()(x)
+    x = Dropout(0.2)(x)
+    
+    x = Conv2D(filters = 256, kernel_size = 3, padding = 'same')(x)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(0.2)(x)
+    x = MaxPooling2D()(x)
+    x = Dropout(0.2)(x)
+    
+    x = Conv2D(filters = 512, kernel_size = 3, padding = 'same')(x)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(0.2)(x)
+    skip_layers.append(x)
+    x = Dropout(0.2)(x)
+    
+    
+    outputs = Flatten()(x)
+    model = Model(inputs=inputs , outputs=outputs)
+    
+    
+    
+    return model
+
+
+
+class Build_AAE():
+    
+    def __init__(self):
+    
+        #建立基本模型
+        self.discriminator = build_discriminator()
+        self.encoder = build_encoder()
+        self.generator = build_generator()
+        
+        #內容網路
+        input = Input((256, 256, 1))
+        output1 = self.encoder(input)
+        output2 = self.generator(output1)
+        self.con_model = Model(inputs=input, outputs=output2 , name = "Content") #編碼器網路
+        
+        #對抗網路
+        input = Input((256, 256, 1))
+        output1 = self.encoder(input)
+        output2 = self.discriminator(output1)
+        self.adv_model = Model(inputs=input, outputs=output2 , name = "Adversarial")
+        
+        #優化器設置
+        self.con_model.compile(optimizer = 'adam', loss= SSIMLoss) #訓練重構網路
+        self.adv_model.compile(optimizer = 'adam', loss= tf.keras.losses.Hinge()) #對抗網路
+        self.discriminator.compile(optimizer = 'adam', loss= tf.keras.losses.Hinge()) #對抗網路
+    
+    
+    def train_on_batch(self , real_images):
+        
+        con_loss = 0 #內容損失
+        dis_loss = 0 #鑑別損失
+        adv_loss = 0 #對抗損失
+        batch_size = real_images.shape[0] #批次大小
+        
+        #訓練內容
+        con_loss = self.con_model.train_on_batch(real_images , real_images)#內容損失
+        
+        
+        #訓練鑑別
+        real_z = np.random.normal(0 , 1,size=[batch_size , 8192])#真實隱維度
+        fake_z = self.encoder(real_images , training = True) #虛假隱維度
+        
+        self.discriminator.trainable = True #解開鑑別器
+        d_real_loss = self.discriminator.train_on_batch(real_z , -np.ones(batch_size))
+        d_fake_loss = self.discriminator.train_on_batch(fake_z , np.ones(batch_size)) 
+        
+        dis_loss = 0.5 * (d_real_loss + d_fake_loss) #鑑別器損失
+        
+        #訓練對抗
+        self.discriminator.trainable = False #鎖住鑑別器
+        adv_loss = self.adv_model.train_on_batch(real_images , -np.ones(batch_size)) #訓練編碼器
+        
+        return con_loss
+        
+    
+
+if __name__ == '__main__':
+    
+    model = build_UNet()
