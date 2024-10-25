@@ -1,0 +1,145 @@
+import cv2
+import numpy as np
+import math
+
+
+    
+def binary_to_decimal(binary_str):
+    """將二進位字串轉換為十進位數字"""
+    decimal_num = 0
+    for i in range(len(binary_str)):
+        decimal_num += int(binary_str[i]) * 2**(len(binary_str) - i - 1)
+    return decimal_num
+
+
+def binary_to_hex(binary_str):
+    """將二進位字串轉換為十六進位字串"""
+    hex_str = ""
+    for i in range(0, len(binary_str), 4):
+        group = binary_str[i:i+4]
+        hex_digit = int(group, 2)
+        hex_str += hex(hex_digit)[2:]  # 去除0x前缀
+    return hex_str
+
+
+# 讀取灰階影像
+img = cv2.imread('img4.jpg')
+draw_img = img.copy()
+
+
+print(2**36)
+
+img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+
+# 使用 Otsu's 方法進行二值化
+ret, thresh = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+thresh = 255 - thresh
+contours , hierarchy = cv2.findContours(thresh, cv2.RETR_TREE , cv2.CHAIN_APPROX_SIMPLE)
+
+
+
+#找簡化輪廓並過濾
+filiter_contours = []
+for cnt in contours:
+    # 近似為多邊形
+    approx = cv2.approxPolyDP(cnt, 0.02*cv2.arcLength(cnt, True), True)
+
+    # 判斷是否為四條線
+    if len(approx) == 4 :
+        # 繪製矩形
+        x,y,w,h = cv2.boundingRect(approx)
+        if w > 20 and h > 20 and w/h < 2 and w/h > 0.5:
+            filiter_contours.append(approx)
+            
+            
+#去外部輪廓
+inner_contours = []
+for i in range(len(filiter_contours)):
+    is_outer = False
+    contour = filiter_contours[i]
+    for j in range(len(filiter_contours)):
+        if i != j:
+            compare_contour = filiter_contours[j]
+            x1, y1, w1, h1 = cv2.boundingRect(contour)
+            x2, y2, w2, h2 = cv2.boundingRect(compare_contour)
+            
+            is_outer = (x1 < x2  and
+                        y1 < y2 and
+                        x1+w1 > x2+w2 and
+                        y1+h1 > y2+h2)
+            if is_outer:
+                break
+            
+    if is_outer == False:
+        inner_contours.append(contour)
+
+
+            
+for contour in inner_contours:
+            
+    #檢查點
+    points = []
+    for point in contour:
+
+        x,y = point[0,0] , point[0,1]
+        points.append([x,y])
+
+    #梯形校正
+    points = sorted(points, key=lambda x: x[1])
+    top_points = sorted(points[:2], key=lambda x: x[0])
+    bottom_points = sorted(points[2:], key=lambda x: x[0])
+    sorted_points = np.array([top_points[0], top_points[1], bottom_points[1], bottom_points[0]])
+
+    pts1 = np.float32(sorted_points)
+    pts2 = np.float32([[0, 0], [120 , 0], [120 , 120], [0, 120]])
+    matrix = cv2.getPerspectiveTransform(pts1, pts2)
+    output = cv2.warpPerspective(img, matrix, (120, 120))
+    ret, output = cv2.threshold(output, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    
+    #去邊
+    height, width = output.shape[:2]
+    output = output[10:height-10, 10:width-10]
+    output = cv2.resize(output , (120,120))
+    
+    
+    # 畫線
+    spacing = 20
+
+    output = cv2.cvtColor(output , cv2.COLOR_GRAY2BGR)
+    for y in range(0, 120, spacing):
+        cv2.line(output, (0, y), (120, y), (0, 0, 255), 1)  # 黑色线条，宽度为1
+    for x in range(0, 120, spacing):
+        cv2.line(output, (x, 0), (x, 120), (0, 0, 255), 1)
+        
+    
+    
+    output2 = cv2.cvtColor(output, cv2.COLOR_BGR2GRAY)
+    ret, output2 = cv2.threshold(output2, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    
+    #解碼
+    text = ""
+    for y in range(0 , 120 , 20):
+        text_line = ""
+        for x in range(0 , 120 , 20):
+            block = output2[y:y+20, x:x+20]
+            
+            count_white = np.count_nonzero(block == 255)
+            count_black = np.count_nonzero(block == 0)
+            if count_white > count_black:
+                text_line += "1"
+            else:
+                text_line += "0"
+                
+        text += text_line
+    
+    value = binary_to_hex(text) #轉進制
+    
+    #畫圖
+    #cv2.imwrite('result/%s.jpg'%value, output)
+    x,y,w,h = cv2.boundingRect(contour)
+    cv2.rectangle(draw_img , (x,y), (x+w, y+h), (0, 255, 0), 1)
+    cv2.drawContours(draw_img, [contour] , 0, (0, 0, 255), 1)
+    cv2.putText(draw_img , str(value) , (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+    
+cv2.imwrite('result/result.jpg', draw_img)
